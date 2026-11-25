@@ -1,292 +1,234 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 
+type Clue = { id: string; icon: string; object: string; title: string; detail: string; treasure?: string; position: string };
 type Mission = {
-  fact: 'F' | 'A' | 'C' | 'T';
-  en: string;
-  title: string;
-  scene: string;
-  prompt: string;
-  kind: 'multi' | 'single';
-  options: string[];
-  correct: number[];
-  hint: string;
-  success: string;
-  wrong: string;
-  rule: string;
-  tag: string;
-  room: string;
-  roomClass: string;
-  clues: Array<{
-    id: string;
-    icon: string;
-    object: string;
-    title: string;
-    detail: string;
-    treasure?: string;
-    position: string;
-  }>;
+  id: string; place: string; fact: 'F' | 'A' | 'C' | 'T'; theme: string; title: string; briefing: string;
+  aiLabel: string; aiOutput: string; question: string; options: string[]; correct: number; success: string;
+  wrong: string; rule: string; sceneClass: string; image?: string; clues: Clue[];
 };
 
-const factSteps = [
-  { letter: 'F', en: 'Find', zh: '找出可疑' },
-  { letter: 'A', en: 'Ask', zh: '追問依據' },
-  { letter: 'C', en: 'Check', zh: '查證比對' },
-  { letter: 'T', en: 'Transform', zh: '修正轉化' },
-];
-
-const treasureCatalog = [
-  { icon: '🔎', name: '懷疑放大鏡' },
-  { icon: '🕶️', name: '公平鏡片' },
-  { icon: '🧭', name: '查證羅盤' },
-  { icon: '🗝️', name: '多元鑰匙' },
+const factTools = [
+  { letter: 'F', en: 'Find', zh: '找出怪怪的地方', icon: '🔦' },
+  { letter: 'A', en: 'Ask', zh: '追問它憑什麼', icon: '📣' },
+  { letter: 'C', en: 'Check', zh: '拿證據來比對', icon: '🔍' },
+  { letter: 'T', en: 'Transform', zh: '把內容修正好', icon: '🛠️' },
 ];
 
 const missions: Mission[] = [
   {
-    fact: 'F', en: 'Find', title: '班群裡的「讀書神招」', tag: '文字幻覺',
-    room: '班群訊息室', roomClass: 'chat-room',
-    scene: '明天要段考，同學把 AI 的回答貼進班群：「有研究證實，每天聽 10 分鐘白噪音，段考平均進步 37%。這是國家腦力研究院 2026 年的研究。」大家正準備轉傳。',
-    prompt: '哪些地方值得先按下暫停？（可複選）', kind: 'multi',
-    options: ['「有研究證實」卻沒有可點開的原始資料', '37% 很精確，但沒有樣本、方法與比較基準', '機構與研究名稱聽起來正式，卻可能無法查到', '句子有完整標點，所以應該可信'],
-    correct: [0, 1, 2],
-    hint: '把「說得很肯定」與「拿得出證據」分開看。',
-    success: '你抓到三個紅旗：來源不明、數字缺少脈絡、權威名稱可能是虛構的。',
-    wrong: '別只看語氣是否專業。幻覺常把具體數字、年份和機構拼成一個很像真的答案。',
-    rule: '越具體的數字與文獻，越要能追到原始來源；查不到時先標示「未證實」。',
+    id: 'chat', place: '五年三班群組', fact: 'F', theme: '假公告', title: '班群突然宣布停課！',
+    briefing: '晚上九點，班群出現一張由 AI 整理的「緊急停課通知」。同學正在問明天到底要不要到校。',
+    aiLabel: 'AI 小幫手轉貼', aiOutput: '「青芽國小明天 6/18 全校停課。教育局已經決定，請立刻轉傳給所有同學！」',
+    question: '證物找齊了。現在最負責任的處理方式是？',
+    options: ['通知看起來很緊急，先大量轉傳再說', '把訊息標成「尚未證實」，改查學校官網與市府正式公告', '再問一次同一個 AI，只要回答相同就是真的', '同學群裡有三個人說看過，所以可以相信'],
+    correct: 1, success: '正確！停課影響所有人，必須回到有權發布、能追溯而且標有日期的官方來源。',
+    wrong: '「很多人轉傳」和「AI說了兩次」都不是新證據。請回到真正有權發布停課消息的單位。',
+    rule: '緊急訊息先別急著轉傳：查發布者、日期、原始連結與官方公告。', sceneClass: 'chat-scene',
     clues: [
-      { id: 'source', icon: '💬', object: '轉傳訊息', title: '權威外衣', detail: '「有研究證實」只有一句話，沒有作者、期刊、連結或可追溯的原始資料。', position: 'p1' },
-      { id: 'number', icon: '37%', object: '精確數字', title: '數字迷霧', detail: '37% 看起來很科學，但沒有樣本數、實驗方法、進步的計算方式與比較組。', position: 'p2' },
-      { id: 'archive', icon: '🗂️', object: '機構名冊', title: '幽靈機構', detail: '在可查詢的機構與研究索引裡找不到相符紀錄。聽起來正式，不等於真的存在。', position: 'p3' },
-      { id: 'treasure-f', icon: '🔎', object: '抽屜暗格', title: '發現隱藏寶物！', detail: '懷疑放大鏡：提醒你把「很具體」放大看，不讓數字與頭銜直接通關。', treasure: '懷疑放大鏡', position: 'p4' },
+      { id: 'account', icon: '👤', object: '發文帳號', title: '只差一個字的假帳號', detail: '帳號是「青芽國小通知站」，不是學校平常使用的「青芽國小官方」。名稱相似不代表相同。', position: 'pos-a' },
+      { id: 'link', icon: '🔗', object: '公告連結', title: '沒有原始連結', detail: '訊息說「教育局已決定」，卻沒有教育局公告、文號或可點開的原文。', position: 'pos-b' },
+      { id: 'date', icon: '📅', object: '班級行事曆', title: '日期對不起來', detail: '班級行事曆顯示明天是 6/17，訊息卻直接寫「明天 6/18」。', position: 'pos-c' },
+      { id: 'treasure-source', icon: '🔎', object: '訊息角落', title: '找到來源放大鏡！', detail: '它會提醒你：誰說的？原文在哪裡？', treasure: '來源放大鏡', position: 'pos-d' },
     ],
   },
   {
-    fact: 'A', en: 'Ask', title: '社團成果展的 AI 配圖', tag: '圖像偏見',
-    room: 'AI 圖像工坊', roomClass: 'image-room',
-    scene: '學生會請 AI 畫「多元社團成果展」。這張圖第一眼很自然，準備直接放上學校首頁。先觀察人物正在做什麼，再回答問題。',
-    prompt: '最值得追問的問題是什麼？', kind: 'single',
-    options: ['畫面顏色是不是太溫暖？', '為什麼操作機器與程式的都是男生，照護與布置的都是女生？', '每位學生的制服是否完全一樣？', '教室裡為什麼有植物？'],
-    correct: [1],
-    hint: '不要只數「有沒有男生和女生」，要看誰被安排做什麼。',
-    success: '你看見了「角色分配」的偏見。人物都有出現，不代表每個人都獲得同樣的可能性。',
-    wrong: '媒體識讀不只是找畫面瑕疵。請觀察性別與能力、興趣、職業之間是否被固定連結。',
-    rule: '辨識偏見要看角色、位置、動作與權力：誰在主導？誰只被安排照顧或裝飾？誰沒有出現？',
+    id: 'homework', place: '自然教室', fact: 'A', theme: '錯誤數據', title: '作業答案太完美了？',
+    briefing: '小沛請 AI 幫忙寫植物呼吸的作業。答案有完整解釋，還附上一個很精確的百分比。',
+    aiLabel: 'AI 作業解答', aiOutput: '「所有植物晚上都停止呼吸，只會釋放氧氣。研究證實，在房間放仙人掌能讓氧氣增加 42%。」',
+    question: '要追問什麼，才能真正判斷這段答案？',
+    options: ['文字寫得很順，就不用再問了', '只問「你確定嗎？」', '追問研究名稱、測量方式、42% 的比較基準，並比對課本', '請 AI 把答案寫得更長'],
+    correct: 2, success: '答對了！精確數字需要樣本、方法與比較基準；「所有」這種絕對說法也值得特別檢查。',
+    wrong: '答案變長或 AI 再保證一次，都不會自動產生證據。追問要能帶你找到可查證的資料。',
+    rule: '數字越精確，越要問清楚：誰研究、怎麼測量、跟什麼比較？', sceneClass: 'science-scene',
     clues: [
-      { id: 'robot', icon: '🤖', object: '機器人桌', title: '誰握有工具？', detail: '操作電腦、工具與機器人的角色全部被安排成男生。', position: 'p1' },
-      { id: 'care', icon: '🩺', object: '照護區', title: '誰被安排照顧？', detail: '照護、紀錄與布置的角色全部被安排成女生，能力與性別被固定連結。', position: 'p2' },
-      { id: 'prompt', icon: '📌', object: '生成提示', title: '「多元」只是標籤', detail: '提示要求多元成果展，但畫面的人數多元，分工卻仍複製刻板印象。', position: 'p3' },
-      { id: 'treasure-a', icon: '🕶️', object: '顏料箱', title: '發現隱藏寶物！', detail: '公平鏡片：不只看誰出現，也看誰主導、誰被服務、誰擁有選擇。', treasure: '公平鏡片', position: 'p4' },
+      { id: 'absolute', icon: '💬', object: '「所有」', title: '說得太絕對', detail: '「所有植物」沒有留下例外與條件，是需要停下來檢查的紅旗。', position: 'pos-a' },
+      { id: 'textbook', icon: '📘', object: '自然課本', title: '課本內容衝突', detail: '課本寫著植物白天與夜晚都會呼吸；光合作用才需要光。', position: 'pos-b' },
+      { id: 'percent', icon: '42%', object: '精確數字', title: '數字沒有方法', detail: '42% 沒有說房間大小、植物數量、測量時間，也找不到研究名稱。', position: 'pos-c' },
+      { id: 'treasure-ruler', icon: '📏', object: '實驗盒', title: '找到證據量尺！', detail: '它會提醒你檢查數字的樣本、方法和比較基準。', treasure: '證據量尺', position: 'pos-d' },
     ],
   },
   {
-    fact: 'C', en: 'Check', title: '一則看似貼心的新規定', tag: '查證來源',
-    room: '校務公告檔案室', roomClass: 'notice-room',
-    scene: 'AI 告訴小凱：「本市所有中學生每學期都有 3 天心理健康假，不必附任何證明。」他想把這句話做成班級公告，但回答沒有附法規名稱與日期。',
-    prompt: '下一步怎麼查最可靠？', kind: 'single',
-    options: ['再問同一個 AI 一次，只要答案相同就採用', '到社群平台搜尋按讚最多的貼文', '比對學校最新公告、主管機關官方規定與發布日期；必要時詢問承辦人', '請另一位同學憑印象判斷'],
-    correct: [2],
-    hint: '規定會更新，查「誰有權發布」和「何時生效」。',
-    success: '查證不是換一個人猜，而是回到有權責、可追溯、標有日期的來源交叉比對。',
-    wrong: '重複問 AI 或看人氣，都不能證明規定存在。先找有權發布這項規定的單位。',
-    rule: '重要資訊至少核對：發布者、日期、原文、適用範圍；不同來源互相抄寫不等於多重證據。',
+    id: 'library', place: '學校圖書館', fact: 'C', theme: '虛構來源', title: '找不到的推薦好書',
+    briefing: '閱讀報告明天要交，AI 推薦了一本超符合主題的書，書名、作者、出版社甚至 ISBN 都有。',
+    aiLabel: 'AI 推薦書目', aiOutput: '《會飛的雨傘》／林小光著／星河童書／ISBN 978-957-8888-42-6。曾獲 2024 兒童想像力金獎。',
+    question: '三份查證結果都找不到這本書，報告應該怎麼寫？',
+    options: ['資料這麼完整，直接放進參考書目', '保留書名但刪掉 ISBN', '寫明目前查無此書，改用館藏與出版社可確認的真實資料', '請 AI 再編一段內容摘要就好'],
+    correct: 2, success: '正確！格式完整不等於來源存在。查不到時要誠實標示，不可以用更多虛構內容把洞補起來。',
+    wrong: '刪掉一個欄位不能讓不存在的書變成真的。參考資料必須能讓別人重新找到。',
+    rule: '好來源必須可追溯：館藏找得到、出版社有紀錄、書號能對應。', sceneClass: 'library-scene',
     clues: [
-      { id: 'issuer', icon: '🏫', object: '公告牆', title: '發布者缺席', detail: '訊息沒有學校、教育主管機關或承辦單位名稱，無法確認誰對規定負責。', position: 'p1' },
-      { id: 'date', icon: '📅', object: '日期章', title: '時間斷線', detail: '沒有發布日、生效日與適用學期；即使曾經正確，也可能已經過時。', position: 'p2' },
-      { id: 'copies', icon: '📱', object: '三則貼文', title: '三個來源？', detail: '三篇熱門貼文用了完全相同的句子，可能都抄自同一則未查證訊息，不是三份獨立證據。', position: 'p3' },
-      { id: 'treasure-c', icon: '🧭', object: '舊時鐘後方', title: '發現隱藏寶物！', detail: '查證羅盤：永遠指向發布者、日期、原文與適用範圍。', treasure: '查證羅盤', position: 'p4' },
+      { id: 'catalog', icon: '🗃️', object: '館藏目錄', title: '全校館藏查無結果', detail: '用完整書名與作者分別搜尋，都沒有相符紀錄。', position: 'pos-a' },
+      { id: 'isbn', icon: '🔢', object: 'ISBN 查詢', title: '書號無法對應', detail: '這組 ISBN 沒有對應到所列的書名與出版社。數字格式像真的，內容仍可能是拼湊。', position: 'pos-b' },
+      { id: 'publisher', icon: '🏢', object: '出版社網站', title: '出版社與獎項不存在', detail: '查不到這間出版社的出版目錄，也找不到同名獎項的主辦單位。', position: 'pos-c' },
+      { id: 'treasure-key', icon: '🗝️', object: '借書櫃檯', title: '找到目錄鑰匙！', detail: '它能打開可搜尋、可回查、可重新找到的真實來源。', treasure: '目錄鑰匙', position: 'pos-d' },
     ],
   },
   {
-    fact: 'T', en: 'Transform', title: '把偏見改成負責任的表達', tag: '修正轉化',
-    room: '社團招募編輯室', roomClass: 'edit-room',
-    scene: '社團招募文案寫著：「男生邏輯好，適合機器人組；女生細心，適合美宣與照顧組。」你已經發現它把性別當成能力證明，現在要修正。',
-    prompt: '哪一個改寫最公平，也最保留學生選擇？', kind: 'single',
-    options: ['男生優先選機器人組，女生也可以試試看', '每個人都能依興趣加入；我們提供程式、機構、美宣與活動照護的入門體驗，不以性別預設能力', '為了公平，男生只能做美宣，女生只能做機器人', '刪掉性別兩字，改成「有天分的人自然會選對組」'],
-    correct: [1],
-    hint: '公平不是把刻板印象顛倒，而是移除預設、提供真實選擇與支持。',
-    success: '你把單一標籤轉成可選擇、可學習的能力描述，也沒有用另一個刻板印象取代它。',
-    wrong: '顛倒限制或把偏見藏起來，都不是真正修正。好的改寫要讓不同學生都有參與與學習的入口。',
-    rule: 'Transform 不只是刪錯字：要補足被忽略的觀點，改成正確、多元、尊重差異的表達。',
+    id: 'photo', place: '校園相簿室', fact: 'C', theme: 'AI 生圖', title: '這張運動會照片是真的嗎？',
+    briefing: '一張逼真的接力賽照片在班群流傳。AI 說這是「今天上午十點的校慶運動會」，但看起來像照片不等於真的。',
+    aiLabel: '班群照片說明', aiOutput: '「這是青芽國小今天上午 10 點舉行的 30 週年運動會。照片就是最直接的證據！」',
+    question: '面對這張很自然的圖片，最好的查證方式是？',
+    options: ['只要人物沒有多手指，就是真照片', '看起來很清楚，所以直接相信', '比對學校原始相簿、拍攝時間、校舍地圖與活動公告', '用另一個 AI 問它像不像 AI 圖'],
+    correct: 2, success: '答對了！高品質生圖可能沒有明顯破綻。真正可靠的是來源、時間、地點與原始紀錄。',
+    wrong: '現在的 AI 圖不一定會出現多手指。只靠肉眼猜「像不像AI」不足以證明真偽。',
+    rule: '查圖片不要只找怪手指；更要查原始來源、時間、地點與前後事件。', sceneClass: 'photo-scene', image: 'assets/ai-sports-day-evidence.png',
     clues: [
-      { id: 'skills', icon: '🧩', object: '能力卡', title: '能力不是性別標籤', detail: '邏輯、細心、照護與創意都能透過經驗與練習發展，不屬於特定性別。', position: 'p1' },
-      { id: 'reverse', icon: '↔️', object: '反轉草稿', title: '顛倒仍是限制', detail: '把男生與女生的工作對調，仍然用性別決定選擇，沒有真正移除偏見。', position: 'p2' },
-      { id: 'support', icon: '🪜', object: '入門體驗表', title: '選擇需要支持', detail: '提供每個人試做、學習與換組的機會，才讓「自由選擇」真正可行。', position: 'p3' },
-      { id: 'treasure-t', icon: '🗝️', object: '印刷機下方', title: '發現隱藏寶物！', detail: '多元鑰匙：修正不是擦掉敏感字，而是打開更多人的參與入口。', treasure: '多元鑰匙', position: 'p4' },
+      { id: 'clock', icon: '🕒', object: '牆上時鐘', title: '時間說法不一致', detail: '貼文說上午十點，但畫面裡的大時鐘顯示的時間不同。單張照片的說明可能被亂配。', position: 'pos-a' },
+      { id: 'tower', icon: '🏫', object: '校舍高塔', title: '校舍地圖沒有這座塔', detail: '官方校舍平面圖與歷年照片中，都沒有右上方的鐘塔。', position: 'pos-b' },
+      { id: 'emblem', icon: '🛡️', object: '制服與布旗', title: '校徽配色互相衝突', detail: '布旗和制服上的標誌並不一致；這需要回查官方活動照片。', position: 'pos-c' },
+      { id: 'treasure-compass', icon: '🧭', object: '照片背面', title: '找到時間指南針！', detail: '它會帶你檢查拍攝時間、地點與事件前後脈絡。', treasure: '時間指南針', position: 'pos-d' },
+    ],
+  },
+  {
+    id: 'club', place: '社團博覽會', fact: 'T', theme: '刻板偏見', title: 'AI 幫每個人決定未來？',
+    briefing: '學生會請 AI 製作社團招募海報。每個人物都畫得很漂亮，但工作分配卻有點熟悉。',
+    aiLabel: 'AI 招募文案', aiOutput: '「男生邏輯好，推薦機器人與程式社；女生細心，推薦美宣與照顧服務隊。」',
+    question: '哪個改寫真正移除了偏見，也保留每個人的選擇？',
+    options: ['男生優先機器人社，女生也可以試試', '把男女分配全部對調', '每個人都能依興趣試做程式、機構、美宣與服務，不用性別預設能力', '刪掉男女兩字，但仍把學生自動分組'],
+    correct: 2, success: '太好了！公平不是把限制反過來，而是移除預設，讓每個人都有嘗試、學習與改變選擇的機會。',
+    wrong: '把限制顛倒或藏起來，仍然是在替別人決定。真正的修正要打開參與入口。',
+    rule: '檢查偏見要看：誰主導、誰被照顧、誰沒有出現、誰被剝奪選擇。', sceneClass: 'club-scene',
+    clues: [
+      { id: 'roles', icon: '🤖', object: '機器人攤位', title: '工具都在誰手上？', detail: '海報裡操作工具、寫程式、做決定的角色全部是男生。', position: 'pos-a' },
+      { id: 'care', icon: '🎨', object: '美宣攤位', title: '照顧工作被固定分配', detail: '女生只被安排布置與照顧，能力與性別被硬綁在一起。', position: 'pos-b' },
+      { id: 'prompt', icon: '📌', object: '生成提示', title: '提示語本身有偏見', detail: '原提示寫著「畫出典型的男生與女生社團」，AI便放大了常見刻板印象。', position: 'pos-c' },
+      { id: 'treasure-prism', icon: '🌈', object: '社團護照', title: '找到多元稜鏡！', detail: '它會提醒你看見被忽略的人、角色與更多可能性。', treasure: '多元稜鏡', position: 'pos-d' },
     ],
   },
 ];
 
-function sameAnswer(a: number[], b: number[]) {
-  return a.length === b.length && [...a].sort().every((value, index) => value === [...b].sort()[index]);
-}
+const finalClaims = [
+  { text: '「資料附了完整書名和 ISBN，所以一定是真的。」', answer: '幻覺', why: '格式完整仍可能是虛構來源。' },
+  { text: '「女生天生比較適合照顧工作。」', answer: '偏見', why: '它把能力與性別固定連結。' },
+  { text: '「照片很自然，所以事件一定發生過。」', answer: '待查證', why: '還要查來源、時間、地點和原始紀錄。' },
+  { text: '「我比對了學校原文、發布日期與市府公告。」', answer: '有證據', why: '這是一條可重做、可追溯的證據鏈。' },
+];
 
 export default function Home() {
   const [started, setStarted] = useState(false);
   const [current, setCurrent] = useState(0);
-  const [selected, setSelected] = useState<number[]>([]);
+  const [found, setFound] = useState<string[]>([]);
+  const [opened, setOpened] = useState<string | null>(null);
+  const [selected, setSelected] = useState<number | null>(null);
   const [result, setResult] = useState<'correct' | 'wrong' | null>(null);
-  const [hint, setHint] = useState(false);
-  const [finished, setFinished] = useState(false);
-  const [foundClues, setFoundClues] = useState<string[]>([]);
-  const [openedClue, setOpenedClue] = useState<string | null>(null);
   const [treasures, setTreasures] = useState<string[]>([]);
+  const [finalMode, setFinalMode] = useState(false);
+  const [finalAnswers, setFinalAnswers] = useState<Record<number, string>>({});
+  const [complete, setComplete] = useState(false);
   const mission = missions[current];
-  const evidenceFound = mission.clues.filter((clue) => !clue.treasure && foundClues.includes(clue.id)).length;
-  const puzzleUnlocked = evidenceFound === 3;
-  const activeClue = mission.clues.find((clue) => clue.id === openedClue);
+  const activeClue = mission.clues.find((clue) => clue.id === opened);
+  const evidenceCount = mission.clues.filter((clue) => !clue.treasure && found.includes(clue.id)).length;
+  const unlocked = evidenceCount === 3;
+  const finalCorrect = useMemo(() => finalClaims.every((claim, index) => finalAnswers[index] === claim.answer), [finalAnswers]);
 
-  function begin() {
-    setStarted(true);
-    setTimeout(() => document.querySelector('#mission')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 80);
-  }
-
-  function choose(index: number) {
-    if (result === 'correct') return;
-    setResult(null);
-    if (mission.kind === 'multi') {
-      setSelected((values) => values.includes(index) ? values.filter((value) => value !== index) : [...values, index]);
-    } else {
-      setSelected([index]);
-    }
-  }
-
-  function checkAnswer() {
-    if (!selected.length || !puzzleUnlocked) return;
-    setResult(sameAnswer(selected, mission.correct) ? 'correct' : 'wrong');
-  }
-
-  function inspectClue(id: string) {
-    const clue = mission.clues.find((item) => item.id === id);
-    if (!clue) return;
-    setOpenedClue(id);
-    setFoundClues((items) => items.includes(id) ? items : [...items, id]);
+  function scrollToGame() { window.setTimeout(() => document.querySelector('#game')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 60); }
+  function begin() { setStarted(true); scrollToGame(); }
+  function inspect(clue: Clue) {
+    setOpened(clue.id);
+    setFound((items) => items.includes(clue.id) ? items : [...items, clue.id]);
     if (clue.treasure) setTreasures((items) => items.includes(clue.treasure!) ? items : [...items, clue.treasure!]);
   }
-
-  function nextMission() {
-    if (current === missions.length - 1) {
-      setFinished(true);
-      setTimeout(() => document.querySelector('#mission')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 80);
-      return;
-    }
-    setCurrent((value) => value + 1);
-    setSelected([]);
-    setResult(null);
-    setHint(false);
-    setFoundClues([]);
-    setOpenedClue(null);
-    setTimeout(() => document.querySelector('#mission')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 80);
+  function check() { if (selected !== null) setResult(selected === mission.correct ? 'correct' : 'wrong'); }
+  function next() {
+    if (current === missions.length - 1) { setFinalMode(true); scrollToGame(); return; }
+    setCurrent((value) => value + 1); setFound([]); setOpened(null); setSelected(null); setResult(null); scrollToGame();
   }
-
   function restart() {
-    setCurrent(0); setSelected([]); setResult(null); setHint(false); setFinished(false); setStarted(true); setFoundClues([]); setOpenedClue(null); setTreasures([]);
-    setTimeout(() => document.querySelector('#mission')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 80);
+    setStarted(true); setCurrent(0); setFound([]); setOpened(null); setSelected(null); setResult(null);
+    setTreasures([]); setFinalMode(false); setFinalAnswers({}); setComplete(false); scrollToGame();
   }
 
   return (
-    <main>
-      <nav className="topbar" aria-label="遊戲資訊">
-        <a className="brand" href="#top" aria-label="回到首頁"><span className="brand-mark">?</span><span>訊息偵探社</span></a>
-        <span className="status-pill">校園 AI 密室 · {finished ? '已解除警報' : started ? `解鎖 ${current + 1} / 4` : '等待解鎖'}</span>
+    <main id="top">
+      <nav className="topbar" aria-label="主要導覽">
+        <a className="brand" href="#top"><span className="brand-mark">✓</span><span>校園真相修復隊</span></a>
+        <div className="nav-right"><span className="age-pill">國小 4–6 年級</span><button type="button" className="nav-button" onClick={begin}>{started ? '回到任務' : '開始遊戲'}</button></div>
       </nav>
 
-      <section className="hero" id="top">
+      <section className="hero">
         <div className="hero-copy">
-          <p className="eyebrow">AI 幻覺 × 偏見辨識挑戰</p>
-          <h1>失控的<br /><em>完美答案</em></h1>
-          <p className="lead">校園 AI 檔案館失控了。探索四間密室、搜集 12 份證物與 4 件隱藏寶物，把「看起來合理」和「真的有證據」分開。</p>
-          <button className="primary" type="button" onClick={begin}>{started ? '回到搜證現場' : '進入檔案館'} <span>→</span></button>
-          <p className="microcopy">點擊探索 · 搜集證物 · 解鎖寶物 · 約 15 分鐘</p>
+          <p className="eyebrow"><span>CASE 001</span> AI 幻覺 × 偏見辨識挑戰</p>
+          <h1>AI 怪怪校園<br /><em>消失的真相</em></h1>
+          <p className="lead">班群、作業、圖書館和運動會照片都被 AI 搞亂了。加入修復隊，走進校園搜證，把「看起來合理」和「真的有證據」分開！</p>
+          <div className="hero-actions"><button className="primary" type="button" onClick={begin}>加入修復隊 <span>→</span></button><span>約 20 分鐘 · 可單人或兩人共玩</span></div>
+          <div className="case-tags"><span>5 個校園地點</span><span>15 份證物</span><span>5 件隱藏工具</span></div>
         </div>
-        <div className="hero-scene" aria-label="數位校園檔案室">
-          <div className="scene-grid" />
-          <div className="case-file">
-            <div className="case-topline"><span>CASE 404</span><span className="blink">● LIVE</span></div>
-            <p>「AI 說得很完整，<br />所以它一定是真的？」</p>
-            <div className="redacted">SOURCE: ███████</div><div className="warning-stamp">待查證</div>
-          </div>
-          <div className="tape tape-one">DO NOT TRUST FIRST IMPRESSIONS</div><div className="tape tape-two">FACT CHECK ZONE</div>
+        <div className="hero-art" aria-label="校園任務地圖">
+          <img src="assets/campus-mystery-map.png" alt="教室、圖書館、健康中心、操場與社團市集組成的校園探險地圖" />
+          <div className="map-sticker"><b>警報！</b><span>AI 答案混進校園</span></div>
+          <div className="map-note">看起來像真的<br />不代表有證據</div>
         </div>
       </section>
 
-      <section className="fact-strip" aria-labelledby="fact-title">
-        <div><p className="section-kicker">你的破關工具</p><h2 id="fact-title">記住 FACT，不被「像真的」騙過</h2></div>
-        <div className="fact-grid">
-          {factSteps.map((step) => <article className="fact-card" key={step.letter}><span>{step.letter}</span><div><strong>{step.en}</strong><small>{step.zh}</small></div></article>)}
-        </div>
+      <section className="toolbelt" aria-labelledby="tool-title">
+        <div className="tool-intro"><p className="section-kicker">你的查證工具</p><h2 id="tool-title">FACT 不是口號，<br />每一步都要動手。</h2></div>
+        <div className="tool-grid">{factTools.map((tool) => <article key={tool.letter}><span className="tool-icon">{tool.icon}</span><span className="tool-letter">{tool.letter}</span><div><b>{tool.en}</b><small>{tool.zh}</small></div></article>)}</div>
       </section>
 
-      {started && <section className="mission-zone" id="mission" aria-live="polite">
-        {!finished ? <>
-          <div className="mission-head">
-            <div className="progress-track" aria-label={`完成進度 ${current + 1} / 4`}>
-              {factSteps.map((step, index) => <span key={step.letter} className={index < current ? 'done' : index === current ? 'active' : ''}>{index < current ? '✓' : step.letter}</span>)}
-            </div>
-            <div className="mission-label"><span>ROOM {current + 1} / 4</span><b>{mission.room}</b></div>
+      {started && <section className="game" id="game" aria-live="polite">
+        {!finalMode && !complete && <>
+          <header className="game-header">
+            <div><p className="section-kicker">校園搜證進度</p><h2>{current + 1}／{missions.length}　{mission.place}</h2></div>
+            <div className="map-progress" aria-label={`完成 ${current + 1} / ${missions.length} 關`}>{missions.map((item, index) => <span key={item.id} className={index < current ? 'done' : index === current ? 'active' : ''}>{index < current ? '✓' : index + 1}</span>)}</div>
+          </header>
+          <div className="mission-card">
+            <div className="mission-copy"><span className="case-type">{mission.fact} · {mission.theme}</span><h3>{mission.title}</h3><p>{mission.briefing}</p></div>
+            <div className="ai-message"><span>{mission.aiLabel}</span><p>{mission.aiOutput}</p><i>AI 產出｜等待查證</i></div>
           </div>
-
-          <div className="detective-hud">
-            <div className="search-meter"><span>本房證物</span><b>{evidenceFound} / 3</b><div><i style={{ width: `${evidenceFound * 33.34}%` }} /></div></div>
-            <div className="inventory"><span>偵探背包</span>{treasureCatalog.map((item) => <div key={item.name} className={treasures.includes(item.name) ? 'owned' : 'empty'} title={treasures.includes(item.name) ? item.name : '尚未取得'}>{treasures.includes(item.name) ? item.icon : '?'}</div>)}</div>
-          </div>
-
-          <div className="room-intro"><div><span>{mission.fact} · {mission.en} ／ {mission.tag}</span><h3>{mission.title}</h3></div><p>{mission.scene}</p></div>
-
-          <div className="explore-layout">
+          <div className="game-layout">
             <div>
-              <div className={`room-canvas ${mission.roomClass}`}>
-                {current === 1 && <img className="room-image" src="assets/ai-biased-career-day.webp" alt="AI 生成的校園社團成果展，學生分成機器人、照護與布置活動" />}
-                <div className="room-glow" />
-                {mission.clues.map((clue) => <button type="button" key={clue.id} onClick={() => inspectClue(clue.id)} className={`hotspot ${clue.position} ${foundClues.includes(clue.id) ? 'found' : ''} ${clue.treasure ? 'treasure-spot' : ''}`} aria-label={`調查${clue.object}`}><span>{clue.icon}</span><small>{clue.object}</small>{foundClues.includes(clue.id) && <i>✓</i>}</button>)}
-                <div className="room-caption"><b>在場景中點擊物件搜證</b><span>找齊 3 份證物開啟 FACT 解碼台；每房另藏 1 件寶物</span></div>
+              <div className={`scene ${mission.sceneClass}`}>
+                {mission.image && <img src={mission.image} alt="待查證的校園運動會照片" />}
+                {!mission.image && <SceneDecor mission={mission.id} />}
+                <div className="scene-shade" />
+                {mission.clues.map((clue) => <button type="button" key={clue.id} className={`hotspot ${clue.position} ${found.includes(clue.id) ? 'found' : ''} ${clue.treasure ? 'treasure' : ''}`} onClick={() => inspect(clue)} aria-label={`調查：${clue.object}`}><span>{clue.icon}</span><small>{clue.object}</small>{found.includes(clue.id) && <i>✓</i>}</button>)}
+                <div className="scene-help"><b>點擊會閃動的物件</b><span>找齊 3 份證物，隱藏工具不影響過關</span></div>
               </div>
-              <div className={`clue-reveal ${activeClue ? 'show' : ''}`} aria-live="polite">
-                {activeClue ? <><div className={activeClue.treasure ? 'treasure-icon' : 'clue-icon'}>{activeClue.icon}</div><div><span>{activeClue.treasure ? 'RARE ITEM' : `EVIDENCE ${evidenceFound} / 3`}</span><h4>{activeClue.title}</h4><p>{activeClue.detail}</p></div></> : <p>點擊閃動的物件，仔細檢查場景。</p>}
+              <div className={`clue-card ${activeClue ? 'visible' : ''}`}>
+                {activeClue ? <><span className="clue-big">{activeClue.icon}</span><div><small>{activeClue.treasure ? '隱藏工具' : `證物 ${evidenceCount}／3`}</small><h4>{activeClue.title}</h4><p>{activeClue.detail}</p></div></> : <p>從場景中找出可疑之處。每一個判斷都要有證物支持。</p>}
               </div>
             </div>
-
-            <div className={`question-panel decode-panel ${puzzleUnlocked ? 'unlocked' : 'locked'}`}>
-              {!puzzleUnlocked ? <div className="locked-message"><span>🔒</span><p>FACT 解碼台尚未開啟</p><small>還需要 {3 - evidenceFound} 份證物</small></div> : <>
-                <span className="question-no">DECODE · {mission.kind === 'multi' ? 'MULTIPLE CLUES' : 'ONE BEST MOVE'}</span>
-                <h3>{mission.prompt}</h3>
-                <div className="options" role="group" aria-label="答案選項">
-                  {mission.options.map((option, index) => {
-                    const isSelected = selected.includes(index);
-                    const answerClass = result === 'correct' && mission.correct.includes(index) ? 'correct-choice' : result === 'wrong' && isSelected ? 'wrong-choice' : '';
-                    return <button type="button" key={option} onClick={() => choose(index)} className={`option ${isSelected ? 'selected' : ''} ${answerClass}`} aria-pressed={isSelected}><span>{String.fromCharCode(65 + index)}</span>{option}</button>;
-                  })}
-                </div>
-                <div className="actions"><button type="button" className="hint-button" onClick={() => setHint((value) => !value)}>提示線索</button><button type="button" className="check-button" disabled={!selected.length || result === 'correct'} onClick={checkAnswer}>送出判斷</button></div>
-                {hint && <p className="hint-box">🔦 {mission.hint}</p>}
-                {result && <div className={`feedback ${result}`} role="status"><strong>{result === 'correct' ? '房門解鎖！' : '解碼失敗，再看一次'}</strong><p>{result === 'correct' ? mission.success : mission.wrong}</p><div className="rule"><b>帶得走的判斷規則</b>{mission.rule}</div>{result === 'correct' && <button type="button" className="next-button" onClick={nextMission}>{current === 3 ? '開啟最終寶箱' : '進入下一間房'} →</button>}</div>}
+            <aside className={`repair-board ${unlocked ? 'unlocked' : ''}`}>
+              <div className="evidence-meter"><span>證物板</span><b>{evidenceCount}／3</b><div><i style={{ width: `${evidenceCount / 3 * 100}%` }} /></div></div>
+              {!unlocked ? <div className="board-locked"><span>📌</span><h3>修復任務尚未開啟</h3><p>還差 {3 - evidenceCount} 份證物。先觀察，再作判斷。</p></div> : <>
+                <p className="board-label">FACT 修復任務</p><h3>{mission.question}</h3>
+                <div className="options">{mission.options.map((option, index) => <button type="button" key={option} onClick={() => { setSelected(index); setResult(null); }} className={`${selected === index ? 'selected' : ''} ${result === 'correct' && index === mission.correct ? 'correct' : ''} ${result === 'wrong' && selected === index ? 'wrong' : ''}`}><span>{String.fromCharCode(65 + index)}</span>{option}</button>)}</div>
+                {!result && <button type="button" className="check-button" onClick={check} disabled={selected === null}>送出修復方案</button>}
+                {result && <div className={`feedback ${result}`}><b>{result === 'correct' ? '證據鏈成立！' : '再看一次證物'}</b><p>{result === 'correct' ? mission.success : mission.wrong}</p><div><strong>帶走的判斷規則</strong><span>{mission.rule}</span></div>{result === 'correct' && <button type="button" onClick={next}>{current === missions.length - 1 ? '前往朝會直播室' : '前往下一個地點'} →</button>}</div>}
               </>}
-            </div>
+            </aside>
           </div>
-        </> : <div className="escape-complete">
-          <p className="section-kicker">ALERT CLEARED</p><div className="unlock-mark">FACT</div><h2>你逃出的不是房間，<br />是「AI 一定客觀」的陷阱。</h2>
-          <p>真正的媒體識讀，不是從此不相信 AI；而是知道什麼時候要停下來、追問、查證，再負責任地修正。</p>
-          <div className="final-treasures"><span>你找到 {treasures.length} / 4 件隱藏寶物</span><div>{treasureCatalog.map((item) => <article key={item.name} className={treasures.includes(item.name) ? 'found' : ''}><b>{treasures.includes(item.name) ? item.icon : '？'}</b><small>{treasures.includes(item.name) ? item.name : '未發現'}</small></article>)}</div></div>
-          <div className="takeaways"><article><b>遇到事實</b><span>追到可查證的原始來源</span></article><article><b>遇到觀點</b><span>問誰的聲音被放大或消失</span></article><article><b>準備分享</b><span>標示不確定，補足脈絡再轉傳</span></article></div>
-          <button type="button" className="primary" onClick={restart}>重新挑戰 <span>↻</span></button>
-        </div>}
+          <div className="inventory"><span>修復隊工具袋</span>{['來源放大鏡', '證據量尺', '目錄鑰匙', '時間指南針', '多元稜鏡'].map((item, index) => <div key={item} className={treasures.includes(item) ? 'owned' : ''}><b>{treasures.includes(item) ? ['🔎','📏','🗝️','🧭','🌈'][index] : '?'}</b><small>{treasures.includes(item) ? item : '尚未發現'}</small></div>)}</div>
+        </>}
+
+        {finalMode && !complete && <section className="final-room">
+          <p className="section-kicker">FINAL · 朝會直播室</p><h2>最後一分鐘：修好今天的校園廣播</h2><p className="final-lead">阿幻把四種內容混進朝會稿。替每一句貼上正確標籤，完成最後查核。</p>
+          <div className="claim-grid">{finalClaims.map((claim, index) => <article key={claim.text}><span>廣播稿 0{index + 1}</span><p>{claim.text}</p><div>{['幻覺','偏見','待查證','有證據'].map((choice) => <button type="button" key={choice} onClick={() => setFinalAnswers((answers) => ({...answers, [index]: choice}))} className={finalAnswers[index] === choice ? 'selected' : ''}>{choice}</button>)}</div>{finalAnswers[index] && <small className={finalAnswers[index] === claim.answer ? 'ok' : 'try'}>{finalAnswers[index] === claim.answer ? `✓ ${claim.why}` : '再想想：這句話的問題是事實、觀點，還是證據不足？'}</small>}</article>)}</div>
+          <button type="button" className="final-submit" disabled={!finalCorrect} onClick={() => setComplete(true)}>送出修正版廣播</button>
+        </section>}
+
+        {complete && <section className="complete-screen">
+          <span className="complete-stamp">CASE<br />CLOSED</span><p className="section-kicker">校園警報解除</p><h2>你不是「抓 AI 說錯」，<br />而是學會用證據做決定。</h2><p>AI 可以幫忙整理與創作，但最後的查證、判斷和修正，仍然要由人負責。</p>
+          <div className="report"><article><b>5</b><span>完成的校園案件</span></article><article><b>15</b><span>必要證物</span></article><article><b>{treasures.length}</b><span>找到的隱藏工具</span></article></div>
+          <div className="takeaway"><b>離開前記住</b><span>流暢不等於正確</span><span>精確數字不等於有證據</span><span>圖片自然不等於事件真實</span><span>AI 也可能放大刻板印象</span></div>
+          <button type="button" className="primary" onClick={restart}>再挑戰一次 ↻</button>
+        </section>}
       </section>}
 
-      <section className="risk-section" aria-labelledby="risk-title">
-        <div className="risk-intro"><p className="section-kicker">為什麼要學</p><h2 id="risk-title">AI 的問題，不只「答錯」</h2><p>最大的風險，是把錯誤資訊、單一觀點或刻板印象，誤認為中立、客觀或權威知識。</p></div>
-        <div className="risk-list"><article><span>01</span><div><h3>幻覺</h3><p>產生錯誤資料、虛構來源、不存在的文獻、錯誤數據或不完整解釋。</p></div></article><article><span>02</span><div><h3>偏見</h3><p>從訓練資料延續或放大性別、族群、文化、職業與社會階級的刻板印象。</p></div></article><article><span>03</span><div><h3>假客觀</h3><p>流暢、完整、肯定的語氣會讓人降低警覺，但表達自信不等於證據可靠。</p></div></article></div>
-      </section>
-
       <section className="teacher-section">
-        <div><p className="section-kicker">課堂延伸</p><h2>別急著公布答案，<br />先讓學生說出判斷線索。</h2></div>
-        <div className="teacher-notes">
-          <details><summary>教師引導提問（點開查看）</summary><ol><li>你先注意到哪一個字、數字、人物或畫面位置？</li><li>如果要相信這則訊息，現在還缺哪一份證據？</li><li>同樣的回答若換成另一個性別、文化或家庭背景，結果會不會不同？</li><li>你的修正版如何做到更正確，也更公平？</li></ol></details>
-          <details><summary>案例研究依據（點開查看）</summary><ul><li><a href="https://nvlpubs.nist.gov/nistpubs/ai/NIST.AI.600-1.pdf" target="_blank" rel="noreferrer">NIST 生成式 AI 風險管理框架</a>：自信地產生錯誤內容、虛構邏輯或引用。</li><li><a href="https://aclanthology.org/2025.acl-long.71/" target="_blank" rel="noreferrer">ACL HALoGEN 研究</a>：涵蓋科學歸因、摘要等多種幻覺任務。</li><li><a href="https://www.unesco.org/en/articles/generative-ai-unesco-study-reveals-alarming-evidence-regressive-gender-stereotypes" target="_blank" rel="noreferrer">UNESCO 性別偏見研究</a>：生成內容可能延續職業與家庭角色刻板印象。</li></ul></details>
-        </div>
+        <div><p className="section-kicker">給老師的課堂延伸</p><h2>先問學生「你看到什麼線索？」<br />再公布答案。</h2><p>建議兩人共用一台裝置：一人操作、一人擔任證據記錄員，每過一關交換角色。</p></div>
+        <div className="teacher-cards"><details><summary>討論提問</summary><ol><li>哪一個細節最容易讓你相信 AI？</li><li>「查不到」和「一定是假的」有什麼不同？</li><li>偏見和錯誤事實要用同一種方式處理嗎？</li><li>你會如何把 AI 原句改得更負責任？</li></ol></details><details><summary>學習重點</summary><ul><li>把 AI 回答視為待查證初稿。</li><li>建立可追溯的來源、日期與證據鏈。</li><li>辨識人物分工、缺席觀點與刻板印象。</li><li>指出問題後，完成正確且公平的改寫。</li></ul></details></div>
       </section>
-
-      <footer><span>訊息偵探社 · AI 幻覺與偏見教學遊戲</span><span>先查證，再使用；能修正，才是理解。</span></footer>
+      <footer><span>AI 怪怪校園：消失的真相</span><span>看見可疑 · 找到證據 · 修正內容</span></footer>
     </main>
   );
+}
+
+function SceneDecor({ mission }: { mission: string }) {
+  if (mission === 'chat') return <div className="decor chat-decor"><div className="phone"><i /><p>緊急通知！</p><span>明天停課</span><small>請立刻轉傳</small></div><div className="calendar">6<br /><b>17</b></div><div className="notice-mini">OFFICIAL?</div></div>;
+  if (mission === 'homework') return <div className="decor science-decor"><div className="board">植物晚上<br />停止呼吸？</div><div className="plant">🌵</div><div className="book">自然課本</div><div className="number">+42%</div></div>;
+  if (mission === 'library') return <div className="decor library-decor"><div className="shelves">📚　📗　📙<br />📘　📕　📚<br />📗　📚　📓</div><div className="book-card"><b>會飛的雨傘</b><span>林小光　著</span><small>查無館藏</small></div><div className="terminal">搜尋結果：0</div></div>;
+  return <div className="decor club-decor"><div className="booth robot">🤖<b>機器人社</b><span>男生專區？</span></div><div className="booth art">🎨<b>美宣服務</b><span>女生專區？</span></div><div className="prompt-note">典型的男生／女生社團</div></div>;
 }
